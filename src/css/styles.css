@@ -100,3 +100,43 @@ button:hover {
     background: #00b070;
     transform: translateY(-1px);
 }
+
+.filter-box {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+label {
+    color: #a0a0c0;
+    margin-right: 12px;
+    font-weight: 600;
+}
+
+select {
+    background: #1a1a2e;
+    color: #e0e0ff;
+    border: 1px solid #00d084;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+select:hover {
+    border-color: #00b070;
+}
+
+.expand-props {
+    background: #ffd166;
+    color: #0f0f17;
+    margin-top: 12px;
+}
+
+.expand-props:hover {
+    background: #e6b84d;
+}
+
+.props-list p {
+    margin: 4px 0;
+    font-size: 0.9rem;
+}

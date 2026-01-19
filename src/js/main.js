@@ -1,90 +1,209 @@
 // =============================================
 // CONFIG
 // =============================================
-const API_KEY = 'f2ae926aacf54a1862ddd8e938b514c8'; // Your key — remove/hide before sharing publicly!
+const API_KEY = 'f2ae926aacf54a1862ddd8e938b514c8'; // Your The Odds API key
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
-const SPORT_KEY = 'upcoming'; // 'upcoming' = next games across ALL sports (multi-sport magic!)
-const REGIONS = 'us'; // US bookmakers (change to 'uk', 'eu', 'au' if preferred)
-const MARKETS = 'h2h'; // h2h = moneyline. Add 'spreads,totals' later for more
+const REGIONS = 'us'; // US bookmakers
+const MARKETS = 'h2h,spreads,totals'; // Simplified – only team markets to avoid 422 errors
 
-// Start with 1000 credits if not set
+// Credits setup (fake money)
 let credits = Number(localStorage.getItem('paperBettingCredits')) || 1000;
 localStorage.setItem('paperBettingCredits', credits);
 
 const creditsDisplay = document.getElementById('credits-display');
-creditsDisplay.textContent = credits;
+if (creditsDisplay) {
+    creditsDisplay.textContent = credits;
+}
 
 // =============================================
-// Fetch real games from The Odds API
+// Fetch list of available sports → populate dropdown
 // =============================================
-async function fetchRealGames() {
+async function fetchSportsList() {
+    try {
+        const url = `${ODDS_API_BASE}/sports?apiKey=${API_KEY}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Sports list API error: ${response.status}`);
+
+        const data = await response.json();
+        const select = document.getElementById('sport-select');
+
+        // Clear existing options except default
+        select.innerHTML = '<option value="upcoming">All Upcoming (Mixed Sports)</option>';
+
+        // Add active sports
+        data.forEach(sport => {
+            if (sport.active) {
+                const option = document.createElement('option');
+                option.value = sport.key;
+                option.textContent = sport.title || sport.key.replace(/_/g, ' ').toUpperCase();
+                select.appendChild(option);
+            }
+        });
+
+        // Listen for dropdown change
+        select.addEventListener('change', (e) => {
+            fetchRealGames(e.target.value);
+        });
+    } catch (err) {
+        console.error('Failed to load sports list:', err);
+        // Fallback hardcoded options
+        const select = document.getElementById('sport-select');
+        select.innerHTML = '<option value="upcoming">All Upcoming (Mixed Sports)</option>';
+        ['basketball_nba', 'americanfootball_nfl', 'soccer_epl', 'baseball_mlb'].forEach(key => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = key.replace(/_/g, ' ').toUpperCase();
+            select.appendChild(option);
+        });
+    }
+}
+
+// =============================================
+// Fetch odds for selected sport (or upcoming)
+// =============================================
+async function fetchRealGames(sportKey = 'upcoming') {
     const container = document.getElementById('games-container');
-    container.innerHTML = '<p>Loading real upcoming games...</p>'; // Show loading
+    if (!container) return;
+
+    container.innerHTML = `<p style="text-align: center; color: #00d084; font-size: 1.1rem;">
+        Loading games for ${sportKey === 'upcoming' ? 'All Upcoming' : sportKey.replace(/_/g, ' ').toUpperCase()}...
+    </p>`;
 
     try {
-        const url = `${ODDS_API_BASE}/sports/${SPORT_KEY}/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}`;
+        const url = `${ODDS_API_BASE}/sports/${sportKey}/odds/?apiKey=${API_KEY}&regions=${REGIONS}&markets=${MARKETS}`;
         const response = await fetch(url);
-        
+
+        console.log('API Response Status:', response.status);
+        console.log('Quota remaining:', response.headers.get('x-requests-remaining'));
+        console.log('Quota used this call:', response.headers.get('x-requests-used'));
+
         if (!response.ok) {
-            throw new Error(`API error: ${response.status} - Check quota or key`);
+            const errorText = await response.text();
+            throw new Error(`API error: ${response.status} - ${errorText || response.statusText}`);
         }
 
         const data = await response.json();
 
-        if (!data || data.length === 0) {
-            throw new Error('No upcoming games right now');
+        if (data.length === 0) {
+            container.innerHTML = `
+                <p style="text-align: center; color: #ffd166; font-size: 1.2rem; padding: 40px 20px;">
+                    No upcoming or live games available for this sport right now.<br>
+                    Try selecting a different sport or check back later!
+                </p>
+            `;
+            console.log(`No games returned for ${sportKey}`);
+            return;
         }
 
-        // Map API data to your simple game format
+        // Map API response to game objects
         const realGames = data.map((event, index) => {
             const home = event.home_team;
             const away = event.away_team;
-            const book = event.bookmakers?.[0]; // First bookmaker (e.g. DraftKings/FanDuel)
-            const moneylineOutcomes = book?.markets?.find(m => m.key === 'h2h')?.outcomes || [];
+            const book = event.bookmakers?.[0] || {};
 
-            const homeOdds = moneylineOutcomes.find(o => o.name === home)?.price || 'N/A';
-            const awayOdds = moneylineOutcomes.find(o => o.name === away)?.price || 'N/A';
+            // Moneyline (h2h)
+            const h2hMarket = book.markets?.find(m => m.key === 'h2h') || {};
+            const moneyline = {
+                [home.toLowerCase()]: h2hMarket.outcomes?.find(o => o.name === home)?.price || 'N/A',
+                [away.toLowerCase()]: h2hMarket.outcomes?.find(o => o.name === away)?.price || 'N/A'
+            };
+
+            // Spreads
+            const spreadsMarket = book.markets?.find(m => m.key === 'spreads') || {};
+            const spreads = spreadsMarket.outcomes?.map(o => `${o.name} ${o.point}: ${o.price}`) || [];
+
+            // Totals (over/under)
+            const totalsMarket = book.markets?.find(m => m.key === 'totals') || {};
+            const totals = totalsMarket.outcomes?.map(o => `${o.name} ${o.point}: ${o.price}`) || [];
 
             return {
                 id: index + 1,
-                sport: event.sport_title || 'Mixed Sports',
+                sport: event.sport_title || 'Unknown Sport',
                 matchup: `${home} vs ${away}`,
-                time: new Date(event.commence_time).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
-                moneyline: { [home.toLowerCase()]: homeOdds, [away.toLowerCase()]: awayOdds }
+                time: new Date(event.commence_time).toLocaleString([], {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit'
+                }),
+                moneyline,
+                spreads,
+                totals,
+                playerProps: [] // No props for now – we removed them to fix 422
             };
         });
 
         renderGames(realGames);
-        console.log('Real games loaded! Quota info in headers (check Network tab in dev tools).');
+        console.log(`Successfully loaded ${realGames.length} real games for ${sportKey}`);
     } catch (err) {
-        console.error('API fetch failed:', err);
-        container.innerHTML += '<p style="color: #ff6b6b;">Couldn\'t load real odds. Using fake fallback data.</p>';
-        renderGames(getFallbackGames()); // Use your old fake ones
+        console.error('Real games fetch failed:', err);
+        container.innerHTML = `
+            <p style="text-align: center; color: #ff6b6b; font-size: 1.1rem; padding: 40px 20px;">
+                Error loading real odds: ${err.message}<br>
+                Showing demo fallback games instead.
+            </p>
+        `;
+        renderGames(getFallbackGames());
     }
 }
 
-// Your existing fallback fake games
+// =============================================
+// Fallback fake games (only used on hard failure)
+// =============================================
 function getFallbackGames() {
     return [
-        { id: 1, sport: "NBA", matchup: "Lakers vs Celtics", time: "Today 8:00 PM", moneyline: { lakers: -150, celtics: +130 } },
-        { id: 2, sport: "NFL", matchup: "Chiefs vs Eagles", time: "Tomorrow 4:25 PM", moneyline: { chiefs: -180, eagles: +155 } },
-        { id: 3, sport: "Soccer – EPL", matchup: "Man City vs Arsenal", time: "Sat 10:00 AM", moneyline: { mancity: -120, arsenal: +100 } }
+        {
+            id: 1,
+            sport: "NBA",
+            matchup: "Lakers vs Celtics",
+            time: "Today 8:00 PM",
+            moneyline: { lakers: -150, celtics: +130 },
+            spreads: ["Lakers -4.5: -110", "Celtics +4.5: -110"],
+            totals: ["Over 225.5: -110", "Under 225.5: -110"],
+            playerProps: []
+        },
+        {
+            id: 2,
+            sport: "NFL",
+            matchup: "Chiefs vs Eagles",
+            time: "Tomorrow 4:25 PM",
+            moneyline: { chiefs: -180, eagles: +155 },
+            spreads: ["Chiefs -5.5: -110", "Eagles +5.5: -110"],
+            totals: ["Over 47.5: -110", "Under 47.5: -110"],
+            playerProps: []
+        },
+        {
+            id: 3,
+            sport: "Soccer – EPL",
+            matchup: "Man City vs Arsenal",
+            time: "Sat 10:00 AM",
+            moneyline: { mancity: -120, arsenal: +100 },
+            spreads: [],
+            totals: [],
+            playerProps: []
+        }
     ];
 }
 
-// Your existing render function (updated slightly for better odds display)
+// =============================================
+// Render the games list
+// =============================================
 function renderGames(gamesList) {
     const container = document.getElementById('games-container');
-    container.innerHTML = ''; // Clear
+    if (!container) return;
+
+    container.innerHTML = '';
 
     gamesList.forEach(game => {
         const card = document.createElement('div');
         card.className = 'game-card';
 
-        // Extract team names safely
         const teams = game.matchup.split(' vs ');
         const team1 = teams[0];
         const team2 = teams[1] || 'Opponent';
+
+        let propsHTML = '<p style="color: #a0a0c0;">Player props not loaded (temporarily disabled to fix API errors)</p>';
 
         card.innerHTML = `
             <div class="game-header">
@@ -92,11 +211,32 @@ function renderGames(gamesList) {
                 <div class="odds">${game.time}</div>
             </div>
             <p>Sport: ${game.sport}</p>
-            <div style="margin-top: 12px;">
-                <strong>Moneyline Odds:</strong><br>
+
+            <div style="margin-top: 16px;">
+                <strong>Moneyline:</strong><br>
                 ${team1}: ${game.moneyline?.[team1.toLowerCase()] || 'N/A'}<br>
                 ${team2}: ${game.moneyline?.[team2.toLowerCase()] || 'N/A'}
             </div>
+
+            ${game.spreads.length > 0 ? `
+                <div style="margin-top: 16px;">
+                    <strong>Spreads:</strong><br>
+                    ${game.spreads.join('<br>')}
+                </div>
+            ` : ''}
+
+            ${game.totals.length > 0 ? `
+                <div style="margin-top: 16px;">
+                    <strong>Totals (O/U):</strong><br>
+                    ${game.totals.join('<br>')}
+                </div>
+            ` : ''}
+
+            <div style="margin-top: 16px;">
+                <strong>Player Props:</strong><br>
+                ${propsHTML}
+            </div>
+
             <button onclick="alert('Bet placement coming soon!')">Place Bet</button>
         `;
 
@@ -104,8 +244,11 @@ function renderGames(gamesList) {
     });
 }
 
-// Load on page start
-fetchRealGames();
+// =============================================
+// Initialize
+// =============================================
+fetchSportsList().then(() => {
+    fetchRealGames('upcoming');
+});
 
-// Log credits for debug
-console.log(`Current fake balance: ${credits} credits`);
+console.log(`Paper Betting App loaded – Credits: ${credits}`);

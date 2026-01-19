@@ -21,9 +21,16 @@
         </section>
 
         <section id="games-list">
-            <h2>Upcoming Games</h2>
-            <div id="games-container"></div>
-        </section>
+    <h2>Upcoming Games</h2>
+    <div class="filter-box">
+        <label for="sport-select">Select Sport:</label>
+        <select id="sport-select">
+            <option value="upcoming">All Upcoming (Mixed)</option>
+            <!-- Options will be added dynamically by JS -->
+        </select>
+    </div>
+    <div id="games-container"></div>
+</section>
     </main>
 
     <script src="src/js/main.js"></script>

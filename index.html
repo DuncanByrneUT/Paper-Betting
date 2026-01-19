@@ -1,14 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Paper Betting App</title>
-    <link rel="stylesheet" href="src/css/styles.css">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Paper Betting – Practice Mode</title>
+    <link rel="stylesheet" href="src/css/styles.css" />
 </head>
 <body>
-    <h1>Welcome to Paper Betting!</h1>
-    <p>Your learning tool for sports betting with fake credits.</p>
+    <header>
+        <h1>Paper Betting</h1>
+        <p class="subtitle">Learn sports betting with fake credits – no real money</p>
+    </header>
+
+    <main>
+        <section id="user-info">
+            <div class="credits-box">
+                <span>Your Credits:</span>
+                <strong id="credits-display">1000</strong>
+            </div>
+        </section>
+
+        <section id="games-list">
+            <h2>Upcoming Games</h2>
+            <div id="games-container"></div>
+        </section>
+    </main>
+
     <script src="src/js/main.js"></script>
 </body>
 </html>

@@ -1,18 +1,80 @@
 // =============================================
-// CONFIG
+// CONFIG & STATE
 // =============================================
-const API_KEY = 'f2ae926aacf54a1862ddd8e938b514c8'; // Your The Odds API key
+const API_KEY = 'f2ae926aacf54a1862ddd8e938b514c8';
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
-const REGIONS = 'us'; // US bookmakers
-const MARKETS = 'h2h,spreads,totals'; // Simplified – only team markets to avoid 422 errors
+const REGIONS = 'us';
+const MARKETS = 'h2h,spreads,totals';
 
-// Credits setup (fake money)
 let credits = Number(localStorage.getItem('paperBettingCredits')) || 1000;
 localStorage.setItem('paperBettingCredits', credits);
 
+let selectedBets = [];
+
+// =============================================
+// DOM Elements
+// =============================================
 const creditsDisplay = document.getElementById('credits-display');
-if (creditsDisplay) {
-    creditsDisplay.textContent = credits;
+const editBtn = document.getElementById('edit-credits-btn');
+const editForm = document.getElementById('edit-credits-form');
+const creditsInput = document.getElementById('credits-input');
+const saveCredits = document.getElementById('save-credits');
+const cancelCredits = document.getElementById('cancel-credits');
+const themeToggle = document.getElementById('theme-toggle');
+
+// Init credits display
+if (creditsDisplay) creditsDisplay.textContent = credits;
+
+// =============================================
+// Dark Mode Toggle
+// =============================================
+function setTheme(mode) {
+    document.body.className = mode + '-mode';
+    themeToggle.textContent = mode === 'dark' ? '☀️' : '🌙';
+    localStorage.setItem('theme', mode);
+}
+
+const savedTheme = localStorage.getItem('theme') || 'light';
+setTheme(savedTheme);
+
+if (themeToggle) {
+    themeToggle.addEventListener('click', () => {
+        const current = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+        setTheme(current === 'dark' ? 'light' : 'dark');
+    });
+}
+
+// =============================================
+// Edit Credits Functionality
+// =============================================
+if (editBtn) {
+    editBtn.addEventListener('click', () => {
+        editForm.style.display = 'block';
+        editBtn.style.display = 'none';
+        creditsInput.value = credits;
+    });
+}
+
+if (saveCredits) {
+    saveCredits.addEventListener('click', () => {
+        const newCredits = Number(creditsInput.value);
+        if (isNaN(newCredits) || newCredits < 0 || newCredits > 999999) {
+            alert('Please enter a number between 0 and 999,999.');
+            return;
+        }
+        credits = newCredits;
+        localStorage.setItem('paperBettingCredits', credits);
+        creditsDisplay.textContent = credits;
+        editForm.style.display = 'none';
+        editBtn.style.display = 'inline-block';
+    });
+}
+
+if (cancelCredits) {
+    cancelCredits.addEventListener('click', () => {
+        editForm.style.display = 'none';
+        editBtn.style.display = 'inline-block';
+    });
 }
 
 // =============================================
@@ -27,10 +89,10 @@ async function fetchSportsList() {
         const data = await response.json();
         const select = document.getElementById('sport-select');
 
-        // Clear existing options except default
+        // Clear and add default
         select.innerHTML = '<option value="upcoming">All Upcoming (Mixed Sports)</option>';
 
-        // Add active sports
+        // Add real active sports
         data.forEach(sport => {
             if (sport.active) {
                 const option = document.createElement('option');
@@ -40,7 +102,7 @@ async function fetchSportsList() {
             }
         });
 
-        // Listen for dropdown change
+        // Listen for change
         select.addEventListener('change', (e) => {
             fetchRealGames(e.target.value);
         });
@@ -59,13 +121,13 @@ async function fetchSportsList() {
 }
 
 // =============================================
-// Fetch odds for selected sport (or upcoming)
+// Fetch odds for selected sport
 // =============================================
 async function fetchRealGames(sportKey = 'upcoming') {
     const container = document.getElementById('games-container');
     if (!container) return;
 
-    container.innerHTML = `<p style="text-align: center; color: #00d084; font-size: 1.1rem;">
+    container.innerHTML = `<p style="text-align: center; color: #1493ff; font-size: 1.1rem;">
         Loading games for ${sportKey === 'upcoming' ? 'All Upcoming' : sportKey.replace(/_/g, ' ').toUpperCase()}...
     </p>`;
 
@@ -75,7 +137,6 @@ async function fetchRealGames(sportKey = 'upcoming') {
 
         console.log('API Response Status:', response.status);
         console.log('Quota remaining:', response.headers.get('x-requests-remaining'));
-        console.log('Quota used this call:', response.headers.get('x-requests-used'));
 
         if (!response.ok) {
             const errorText = await response.text();
@@ -86,39 +147,42 @@ async function fetchRealGames(sportKey = 'upcoming') {
 
         if (data.length === 0) {
             container.innerHTML = `
-                <p style="text-align: center; color: #ffd166; font-size: 1.2rem; padding: 40px 20px;">
+                <p style="text-align: center; color: #f87171; font-size: 1.2rem; padding: 40px 20px;">
                     No upcoming or live games available for this sport right now.<br>
-                    Try selecting a different sport or check back later!
+                    Try a different sport or check back later!
                 </p>
             `;
-            console.log(`No games returned for ${sportKey}`);
             return;
         }
 
-        // Map API response to game objects
         const realGames = data.map((event, index) => {
             const home = event.home_team;
             const away = event.away_team;
             const book = event.bookmakers?.[0] || {};
 
-            // Moneyline (h2h)
-            const h2hMarket = book.markets?.find(m => m.key === 'h2h') || {};
+            const h2h = book.markets?.find(m => m.key === 'h2h') || {};
             const moneyline = {
-                [home.toLowerCase()]: h2hMarket.outcomes?.find(o => o.name === home)?.price || 'N/A',
-                [away.toLowerCase()]: h2hMarket.outcomes?.find(o => o.name === away)?.price || 'N/A'
+                [home.toLowerCase()]: h2h.outcomes?.find(o => o.name === home)?.price || 'N/A',
+                [away.toLowerCase()]: h2h.outcomes?.find(o => o.name === away)?.price || 'N/A'
             };
 
-            // Spreads
-            const spreadsMarket = book.markets?.find(m => m.key === 'spreads') || {};
-            const spreads = spreadsMarket.outcomes?.map(o => `${o.name} ${o.point}: ${o.price}`) || [];
+            const spreadsM = book.markets?.find(m => m.key === 'spreads') || {};
+            const spreads = spreadsM.outcomes?.map(o => ({
+                side: o.name,
+                point: o.point,
+                odds: o.price
+            })) || [];
 
-            // Totals (over/under)
-            const totalsMarket = book.markets?.find(m => m.key === 'totals') || {};
-            const totals = totalsMarket.outcomes?.map(o => `${o.name} ${o.point}: ${o.price}`) || [];
+            const totalsM = book.markets?.find(m => m.key === 'totals') || {};
+            const totals = totalsM.outcomes?.map(o => ({
+                side: o.name,
+                point: o.point,
+                odds: o.price
+            })) || [];
 
             return {
                 id: index + 1,
-                sport: event.sport_title || 'Unknown Sport',
+                sport: event.sport_title || 'Unknown',
                 matchup: `${home} vs ${away}`,
                 time: new Date(event.commence_time).toLocaleString([], {
                     weekday: 'short',
@@ -129,19 +193,17 @@ async function fetchRealGames(sportKey = 'upcoming') {
                 }),
                 moneyline,
                 spreads,
-                totals,
-                playerProps: [] // No props for now – we removed them to fix 422
+                totals
             };
         });
 
         renderGames(realGames);
-        console.log(`Successfully loaded ${realGames.length} real games for ${sportKey}`);
     } catch (err) {
-        console.error('Real games fetch failed:', err);
+        console.error('Fetch failed:', err);
         container.innerHTML = `
-            <p style="text-align: center; color: #ff6b6b; font-size: 1.1rem; padding: 40px 20px;">
+            <p style="text-align: center; color: #f87171; font-size: 1.1rem; padding: 40px 20px;">
                 Error loading real odds: ${err.message}<br>
-                Showing demo fallback games instead.
+                Showing demo fallback games.
             </p>
         `;
         renderGames(getFallbackGames());
@@ -149,7 +211,7 @@ async function fetchRealGames(sportKey = 'upcoming') {
 }
 
 // =============================================
-// Fallback fake games (only used on hard failure)
+// Fallback fake games
 // =============================================
 function getFallbackGames() {
     return [
@@ -159,9 +221,8 @@ function getFallbackGames() {
             matchup: "Lakers vs Celtics",
             time: "Today 8:00 PM",
             moneyline: { lakers: -150, celtics: +130 },
-            spreads: ["Lakers -4.5: -110", "Celtics +4.5: -110"],
-            totals: ["Over 225.5: -110", "Under 225.5: -110"],
-            playerProps: []
+            spreads: [{side: 'Lakers', point: -4.5, odds: -110}, {side: 'Celtics', point: +4.5, odds: -110}],
+            totals: [{side: 'Over', point: 225.5, odds: -110}, {side: 'Under', point: 225.5, odds: -110}]
         },
         {
             id: 2,
@@ -169,9 +230,8 @@ function getFallbackGames() {
             matchup: "Chiefs vs Eagles",
             time: "Tomorrow 4:25 PM",
             moneyline: { chiefs: -180, eagles: +155 },
-            spreads: ["Chiefs -5.5: -110", "Eagles +5.5: -110"],
-            totals: ["Over 47.5: -110", "Under 47.5: -110"],
-            playerProps: []
+            spreads: [{side: 'Chiefs', point: -5.5, odds: -110}, {side: 'Eagles', point: +5.5, odds: -110}],
+            totals: [{side: 'Over', point: 47.5, odds: -110}, {side: 'Under', point: 47.5, odds: -110}]
         },
         {
             id: 3,
@@ -180,14 +240,13 @@ function getFallbackGames() {
             time: "Sat 10:00 AM",
             moneyline: { mancity: -120, arsenal: +100 },
             spreads: [],
-            totals: [],
-            playerProps: []
+            totals: []
         }
     ];
 }
 
 // =============================================
-// Render the games list
+// Render games with clickable odds
 // =============================================
 function renderGames(gamesList) {
     const container = document.getElementById('games-container');
@@ -203,7 +262,39 @@ function renderGames(gamesList) {
         const team1 = teams[0];
         const team2 = teams[1] || 'Opponent';
 
-        let propsHTML = '<p style="color: #a0a0c0;">Player props not loaded (temporarily disabled to fix API errors)</p>';
+        let mlHTML = `
+            <div style="margin-top: 16px;">
+                <strong>Moneyline:</strong><br>
+                <button class="odds-btn" data-game-id="${game.id}" data-type="moneyline" data-side="${team1.toLowerCase()}" data-odds="${game.moneyline[team1.toLowerCase()]}">
+                    ${team1}: ${game.moneyline[team1.toLowerCase()]}
+                </button>
+                <button class="odds-btn" data-game-id="${game.id}" data-type="moneyline" data-side="${team2.toLowerCase()}" data-odds="${game.moneyline[team2.toLowerCase()]}">
+                    ${team2}: ${game.moneyline[team2.toLowerCase()]}
+                </button>
+            </div>
+        `;
+
+        let spreadHTML = game.spreads.length > 0 ? `
+            <div style="margin-top: 20px;">
+                <strong>Spreads:</strong><br>
+                ${game.spreads.map(s => `
+                    <button class="odds-btn" data-game-id="${game.id}" data-type="spread" data-side="${s.side}" data-point="${s.point}" data-odds="${s.odds}">
+                        ${s.side} ${s.point}: ${s.odds}
+                    </button>
+                `).join('')}
+            </div>
+        ` : '';
+
+        let totalHTML = game.totals.length > 0 ? `
+            <div style="margin-top: 20px;">
+                <strong>Totals:</strong><br>
+                ${game.totals.map(t => `
+                    <button class="odds-btn" data-game-id="${game.id}" data-type="total" data-side="${t.side}" data-point="${t.point}" data-odds="${t.odds}">
+                        ${t.side} ${t.point}: ${t.odds}
+                    </button>
+                `).join('')}
+            </div>
+        ` : '';
 
         card.innerHTML = `
             <div class="game-header">
@@ -211,44 +302,141 @@ function renderGames(gamesList) {
                 <div class="odds">${game.time}</div>
             </div>
             <p>Sport: ${game.sport}</p>
-
-            <div style="margin-top: 16px;">
-                <strong>Moneyline:</strong><br>
-                ${team1}: ${game.moneyline?.[team1.toLowerCase()] || 'N/A'}<br>
-                ${team2}: ${game.moneyline?.[team2.toLowerCase()] || 'N/A'}
-            </div>
-
-            ${game.spreads.length > 0 ? `
-                <div style="margin-top: 16px;">
-                    <strong>Spreads:</strong><br>
-                    ${game.spreads.join('<br>')}
-                </div>
-            ` : ''}
-
-            ${game.totals.length > 0 ? `
-                <div style="margin-top: 16px;">
-                    <strong>Totals (O/U):</strong><br>
-                    ${game.totals.join('<br>')}
-                </div>
-            ` : ''}
-
-            <div style="margin-top: 16px;">
-                <strong>Player Props:</strong><br>
-                ${propsHTML}
-            </div>
-
-            <button onclick="alert('Bet placement coming soon!')">Place Bet</button>
+            ${mlHTML}
+            ${spreadHTML}
+            ${totalHTML}
         `;
 
         container.appendChild(card);
     });
+
+    // Add click listeners to odds buttons
+    document.querySelectorAll('.odds-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const bet = {
+                gameId: e.target.dataset.gameId,
+                type: e.target.dataset.type,
+                side: e.target.dataset.side,
+                point: e.target.dataset.point || null,
+                odds: Number(e.target.dataset.odds),
+                description: e.target.textContent.trim()
+            };
+
+            // Prevent duplicate
+            if (selectedBets.some(b => b.gameId === bet.gameId && b.type === bet.type && b.side === bet.side && b.point === bet.point)) {
+                alert('This selection is already in your bet slip!');
+                return;
+            }
+
+            selectedBets.push(bet);
+            updateBetSlip();
+        });
+    });
 }
 
 // =============================================
-// Initialize
+// Bet Slip Functions
 // =============================================
-fetchSportsList().then(() => {
-    fetchRealGames('upcoming');
+function updateBetSlip() {
+    const slip = document.getElementById('selected-bets');
+    slip.innerHTML = '';
+
+    if (selectedBets.length === 0) {
+        slip.innerHTML = '<p style="text-align: center; color: #64748b;">Your bet slip is empty</p>';
+        document.getElementById('place-bet-btn').disabled = true;
+        updatePayout();
+        return;
+    }
+
+    selectedBets.forEach((bet, index) => {
+        const item = document.createElement('div');
+        item.className = 'selected-bet';
+        item.innerHTML = `
+            <div>
+                <strong>${bet.description}</strong><br>
+                <small>${bet.type.toUpperCase()} - Game #${bet.gameId}</small>
+            </div>
+            <button class="remove-bet" data-index="${index}">X</button>
+        `;
+        slip.appendChild(item);
+    });
+
+    document.querySelectorAll('.remove-bet').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = Number(e.target.dataset.index);
+            selectedBets.splice(index, 1);
+            updateBetSlip();
+        });
+    });
+
+    document.getElementById('place-bet-btn').disabled = false;
+    updatePayout();
+}
+
+function updatePayout() {
+    if (selectedBets.length === 0) {
+        document.getElementById('total-odds').textContent = '1.00';
+        document.getElementById('potential-payout').textContent = '0.00';
+        return;
+    }
+
+    const decimalOdds = selectedBets.map(bet => {
+        const o = bet.odds;
+        return o > 0 ? (o / 100 + 1) : (100 / Math.abs(o) + 1);
+    });
+
+    const totalDecimal = decimalOdds.reduce((a, b) => a * b, 1);
+    const stake = Number(document.getElementById('stake-input').value) || 0;
+    const payout = (stake * totalDecimal).toFixed(2);
+
+    const totalAmerican = totalDecimal > 2 ? ((totalDecimal - 1) * 100).toFixed(0) : (-100 / (totalDecimal - 1)).toFixed(0);
+
+    document.getElementById('total-odds').textContent = totalDecimal.toFixed(2) + ` (${totalAmerican > 0 ? '+' : ''}${totalAmerican})`;
+    document.getElementById('potential-payout').textContent = payout;
+}
+
+document.getElementById('stake-input')?.addEventListener('input', updatePayout);
+
+document.getElementById('place-bet-btn')?.addEventListener('click', () => {
+    const stake = Number(document.getElementById('stake-input').value);
+    if (stake <= 0 || stake > credits) {
+        alert('Invalid stake – must be between 1 and your current credits.');
+        return;
+    }
+
+    credits -= stake;
+    localStorage.setItem('paperBettingCredits', credits);
+    creditsDisplay.textContent = credits;
+
+    alert(`Bet placed! ${stake} credits risked on ${selectedBets.length}-leg parlay.\n(Outcome simulation coming next!)`);
+
+    selectedBets = [];
+    updateBetSlip();
 });
+
+document.getElementById('clear-bets-btn')?.addEventListener('click', () => {
+    if (confirm('Clear all selections?')) {
+        selectedBets = [];
+        updateBetSlip();
+    }
+});
+
+// =============================================
+// Initialize the app
+// =============================================
+async function initializeApp() {
+    try {
+        await fetchSportsList();
+        await fetchRealGames('upcoming');
+    } catch (err) {
+        console.error('App initialization failed:', err);
+        if (document.getElementById('games-container')) {
+            document.getElementById('games-container').innerHTML = 
+                '<p style="text-align:center;color:#ef4444;">Failed to load games. Check console for details.</p>';
+        }
+    }
+}
+
+initializeApp();
 
 console.log(`Paper Betting App loaded – Credits: ${credits}`);

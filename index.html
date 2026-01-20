@@ -6,32 +6,57 @@
     <title>Paper Betting – Practice Mode</title>
     <link rel="stylesheet" href="src/css/styles.css" />
 </head>
-<body>
+<body class="light-mode"> <!-- default light -->
     <header>
-        <h1>Paper Betting</h1>
+        <div class="header-content">
+            <h1>Paper Betting</h1>
+            <button id="theme-toggle" title="Toggle Dark/Light Mode">🌙</button>
+        </div>
         <p class="subtitle">Learn sports betting with fake credits – no real money</p>
     </header>
 
-    <main>
-        <section id="user-info">
-            <div class="credits-box">
-                <span>Your Credits:</span>
-                <strong id="credits-display">1000</strong>
-            </div>
-        </section>
+    <div class="container">
+        <main>
+            <section id="user-info">
+                <div class="credits-box">
+                    <span>Your Credits:</span>
+                    <strong id="credits-display">1000</strong>
+                    <button id="edit-credits-btn">Edit</button>
+                    <div id="edit-credits-form" style="display: none; margin-top: 12px;">
+                        <input type="number" id="credits-input" min="0" max="999999" value="1000" step="1" />
+                        <button id="save-credits">Save</button>
+                        <button id="cancel-credits">Cancel</button>
+                    </div>
+                </div>
+            </section>
 
-        <section id="games-list">
-    <h2>Upcoming Games</h2>
-    <div class="filter-box">
-        <label for="sport-select">Select Sport:</label>
-        <select id="sport-select">
-            <option value="upcoming">All Upcoming (Mixed)</option>
-            <!-- Options will be added dynamically by JS -->
-        </select>
+            <section id="games-list">
+                <h2>Upcoming Games</h2>
+                <div class="filter-box">
+                    <label for="sport-select">Select Sport:</label>
+                    <select id="sport-select">
+                        <option value="upcoming">All Upcoming (Mixed)</option>
+                    </select>
+                </div>
+                <div id="games-container"></div>
+            </section>
+        </main>
+
+        <aside id="bet-slip">
+            <h3>Bet Slip</h3>
+            <div id="selected-bets"></div>
+            <div class="bet-controls" style="margin-top: 20px;">
+                <label for="stake-input">Stake (credits):</label>
+                <input type="number" id="stake-input" min="1" value="10" step="1" />
+            </div>
+            <div id="parlay-info" style="margin: 16px 0; color: #1493ff;">
+                <p>Total Odds: <span id="total-odds">1.00</span></p>
+                <p>Potential Payout: <span id="potential-payout">0.00</span> credits</p>
+            </div>
+            <button id="place-bet-btn" disabled>Place Bet</button>
+            <button id="clear-bets-btn">Clear Slip</button>
+        </aside>
     </div>
-    <div id="games-container"></div>
-</section>
-    </main>
 
     <script src="src/js/main.js"></script>
 </body>

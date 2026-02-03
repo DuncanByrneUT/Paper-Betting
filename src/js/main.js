@@ -5,7 +5,7 @@ const API_KEY = 'f2ae926aacf54a1862ddd8e938b514c8';
 const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
 const REGIONS = 'us';
 const MARKETS = 'h2h,spreads,totals';
-
+import './index.css'
 let credits = Number(localStorage.getItem('paperBettingCredits')) || 1000;
 localStorage.setItem('paperBettingCredits', credits);
 
